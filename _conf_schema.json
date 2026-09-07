@@ -1,0 +1,65 @@
+{
+  "twitter_section": {
+    "type": "object",
+    "description": "推特账号与 Cookies 配置",
+    "items": {
+      "cookie_json": {
+        "type": "string",
+        "description": "Twitter Cookies (JSON 格式)",
+        "hint": "请使用浏览器插件将 Twitter Cookies 导出为 JSON 格式并粘贴至此处",
+        "editor_mode": true,
+        "editor_language": "json",
+        "default": "[]"
+      },
+      "proxy": {
+        "type": "string",
+        "description": "网络代理地址",
+        "hint": "访问 Twitter 与 Gemini 所需的代理（例: http://127.0.0.1:7890）",
+        "default": "http://127.0.0.1:7890"
+      }
+    }
+  },
+  "gemini_section": {
+    "type": "object",
+    "description": "Gemini AI 审美打分配置",
+    "items": {
+      "gemini_api_key": {
+        "type": "string",
+        "description": "Gemini API Key",
+        "secret": true,
+        "default": ""
+      },
+      "model_name": {
+        "type": "string",
+        "description": "Gemini 模型",
+        "default": "gemini-3.1-flash-lite"
+      },
+      "score_threshold": {
+        "type": "float",
+        "description": "AI 审美合格线 (0-10)",
+        "default": 7.0
+      }
+    }
+  },
+  "filter_section": {
+    "type": "object",
+    "description": "WD14 粗筛标签配置",
+    "items": {
+      "wd14_threshold": {
+        "type": "float",
+        "description": "WD14 标签判定阈值",
+        "default": 0.35
+      },
+      "whitelist_tags": {
+        "type": "string",
+        "description": "白名单标签（半角逗号分隔）",
+        "default": "1girl, girls, multiple_girls, 2girls, 3girls, 4girls, 5girls, 6+girls, virtual_youtuber"
+      },
+      "must_reject_tags": {
+        "type": "string",
+        "description": "黑名单标签（半角逗号分隔）",
+        "default": "screenshot, game_screenshot, 3d, realistic, 1boy, male_focus, text_focus, no_humans, tokusatsu"
+      }
+    }
+  }
+}
