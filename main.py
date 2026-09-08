@@ -2,9 +2,9 @@ import os
 import shutil
 import asyncio
 from pathlib import Path
-from typing import Set
+from typing import Set, List
 
-from astrbot.api import logger  # 使用官方 logger 接口
+from astrbot.api import logger
 from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -19,7 +19,7 @@ from .utils.ai_evaluator import AIEvaluator
     "astrbot_plugin_twitanime",
     "LaPluma588",
     "基于 WD14 与 Gemini 多模态 AI 的推特二次元插画抓取与审美精选插件",
-    "1.0.0"
+    "1.0.2"
 )
 class TwitanimePlugin(Star):
     def __init__(self, context: Context, config: dict):
@@ -52,10 +52,8 @@ class TwitanimePlugin(Star):
             t.strip() for t in ft_conf.get("must_reject_tags", "").split(",") if t.strip()
         }
 
-        # 保存/更新 Cookies
         CookieManager.sanitize_and_save(self.cookie_json_str, self.cookies_file)
 
-        # 加载 WD14 模型
         model_path = self.plugin_dir / "models" / "wd14" / "model.onnx"
         tags_path = self.plugin_dir / "models" / "wd14" / "selected_tags.csv"
         
@@ -71,15 +69,15 @@ class TwitanimePlugin(Star):
 
     @filter.command("Ximage")
     async def fetch_x_images(self, event: AstrMessageEvent, count: int = 1):
-        """抓取并精选 Twitter 二次元插画"""
-        target_count = max(1, min(count, 10))
+        """持续抓取并推送合格的 X/Twitter 二次元插画推文"""
+        target_tweet_count = max(1, min(count, 10))
 
         if not self.gemini_key:
             yield event.plain_result("❌ 未配置 Gemini API Key，无法使用 AI 审美精选功能。")
             return
 
-        yield event.plain_result(f"🔍 正在为您检索并精选 {target_count} 张推特二次元插画，请稍候...")
-        logger.info(f"[Twitanime] 🚀 收到指令，开始为用户精选 {target_count} 张插画...")
+        yield event.plain_result(f"🔍 正在为您检索并精选 {target_tweet_count} 条合格插画推文，请稍候...")
+        logger.info(f"[Twitanime] 🚀 收到指令，目标寻找并推送 {target_tweet_count} 条精选推文...")
 
         fetcher = TwitterFetcher(cookies_file=self.cookies_file, proxy=self.proxy)
         if not await fetcher.init_client():
@@ -93,70 +91,84 @@ class TwitanimePlugin(Star):
             proxy=self.proxy
         )
 
-        sent_count = 0
-        total_scanned = 0
+        sent_tweet_count = 0  # 记录成功推送的合格推文数量
+        scanned_tweet_count = 0  # 扫描过的含图推文数量
 
-        async for item in fetcher.fetch_image_stream(fetch_tweet_count=30):
-            if sent_count >= target_count:
-                logger.info(f"[Twitanime] 🎉 已成功精选并推送 {target_count} 张插画，提前结束任务。")
+        async for tweet_data in fetcher.fetch_image_tweets_stream(batch_size=20):
+            if sent_tweet_count >= target_tweet_count:
                 break
 
-            total_scanned += 1
-            media_obj = item["media_obj"]
-            tweet_id = item["tweet_id"]
-            m_idx = item["media_index"]
+            scanned_tweet_count += 1
+            tweet_id = tweet_data["tweet_id"]
+            author_name = tweet_data["author_name"]
+            author_handle = f"@{tweet_data['author_screen_name']}" if tweet_data["author_screen_name"] else ""
+            photos = tweet_data["photos"]
 
-            temp_img_path = self.temp_dir / f"tweet_{tweet_id}_{m_idx}.jpg"
-            logger.info(f"[Twitanime] 📥 [{total_scanned}] 正在下载推特图片: tweet_{tweet_id}_{m_idx}.jpg")
+            author_text = f"{author_name} ({author_handle})" if author_handle else author_name
+            logger.info(f"[Twitanime] 🧐 正在处理第 {scanned_tweet_count} 条含图推文 (ID: {tweet_id}, 共 {len(photos)} 张图片)...")
 
-            try:
-                await media_obj.download(str(temp_img_path))
-            except Exception as e:
-                logger.error(f"[Twitanime] ❌ 图片下载超时/失败: {e}")
-                continue
+            passed_image_paths: List[Path] = []
 
-            # 1. WD14 粗筛
-            if self.wd14_filter:
-                passed, reason = self.wd14_filter.check_pass(
-                    str(temp_img_path),
-                    whitelist=self.whitelist_tags,
-                    must_reject=self.must_reject_tags
-                )
-                if not passed:
-                    logger.info(f"[Twitanime] 🔴 [WD14 粗筛拦截] 原因: {reason}")
+            # 遍历该推文下的每张图片进行检测
+            for m_idx, media_obj in photos:
+                temp_img_path = self.temp_dir / f"tweet_{tweet_id}_{m_idx}.jpg"
+                logger.info(f"[Twitanime] 📥 下载图片: tweet_{tweet_id}_{m_idx}.jpg")
+
+                try:
+                    await media_obj.download(str(temp_img_path))
+                except Exception as e:
+                    logger.error(f"[Twitanime] ❌ 图片下载失败: {e}")
+                    continue
+
+                # 1. WD14 粗筛
+                if self.wd14_filter:
+                    passed, reason = self.wd14_filter.check_pass(
+                        str(temp_img_path),
+                        whitelist=self.whitelist_tags,
+                        must_reject=self.must_reject_tags
+                    )
+                    if not passed:
+                        logger.info(f"[Twitanime] 🔴 [WD14 粗筛拦截] 原因: {reason}")
+                        if temp_img_path.exists():
+                            temp_img_path.unlink()
+                        continue
+                    else:
+                        logger.info(f"[Twitanime] 🟢 [WD14 粗筛通过]")
+
+                # 2. Gemini 审美评估
+                logger.info(f"[Twitanime] 🤖 送往 Gemini 进行审美评估...")
+                ai_res = await evaluator.evaluate(str(temp_img_path))
+
+                if ai_res["pass"]:
+                    logger.info(f"[Twitanime] 🟢 [AI 审美放行] 得分: {ai_res['score']} | 评语: {ai_res['reason']}")
+                    passed_image_paths.append(temp_img_path)
+                else:
+                    logger.info(f"[Twitanime] 🔴 [AI 审美未达标] 得分: {ai_res['score']} | 原因: {ai_res['reason']}")
                     if temp_img_path.exists():
                         temp_img_path.unlink()
-                    continue
-                else:
-                    logger.info(f"[Twitanime] 🟢 [WD14 粗筛通过] 原因: {reason}")
 
-            # 2. Gemini 审美评估
-            logger.info(f"[Twitanime] 🤖 正在送往 Gemini ({self.gemini_model}) 进行审美与完成度打分...")
-            ai_res = await evaluator.evaluate(str(temp_img_path))
-            score = ai_res["score"]
-            reason = ai_res["reason"]
+            # 如果本条推文有通过筛选的图片，则进行推送，并增加【精选推文计数】
+            if passed_image_paths:
+                sent_tweet_count += 1
+                logger.info(f"[Twitanime] 🎉 推文 {tweet_id} 有 {len(passed_image_paths)} 张合格图片，推送给用户 [{sent_tweet_count}/{target_tweet_count}]")
 
-            if ai_res["pass"]:
-                sent_count += 1
-                logger.info(f"[Twitanime] 🟢 [AI 审美精选放行] 得分: {score} | 评语: {reason}")
+                for img_path in passed_image_paths:
+                    chain = MessageChain()
+                    chain.message(f"🎨 作者：{author_text}\n🆔 推文 ID：{tweet_id}")
+                    chain.file_image(str(img_path))
+                    
+                    await event.send(chain)
+                    await asyncio.sleep(1.0)
 
-                chain = MessageChain()
-                chain.message(f"✨ [精选插画 {sent_count}/{target_count}]\n评分: {score} | 评价: {reason}")
-                chain.file_image(str(temp_img_path))
-                
-                await event.send(chain)
+                    # 发送完后清理临时文件
+                    if img_path.exists():
+                        img_path.unlink()
+
                 await asyncio.sleep(1.5)
-            else:
-                logger.info(f"[Twitanime] 🔴 [AI 审美未达标准] 得分: {score} | 扣分/拒绝原因: {reason}")
 
-            if temp_img_path.exists():
-                temp_img_path.unlink()
+        logger.info(f"[Twitanime] 🏁 任务完成，共扫描 {scanned_tweet_count} 条推文，成功推送 {sent_tweet_count} 条符合要求的推文。")
 
-            await asyncio.sleep(3.0)
-
-        logger.info(f"[Twitanime] 🏁 流水线处理完毕，累计扫描 {total_scanned} 张图片，成功推送 {sent_count} 张。")
-
-        if sent_count == 0:
-            yield event.plain_result("😢 本次检索未找到符合审美及过滤标准的插画，请稍后再试。")
-        elif sent_count < target_count:
-            yield event.plain_result(f"✅ 精选完成，本次符合要求的图片共 {sent_count} 张。")
+        if sent_tweet_count == 0:
+            yield event.plain_result("😢 检索完当前 Timeline，未找到符合要求的精选插画推文。")
+        elif sent_tweet_count < target_tweet_count:
+            yield event.plain_result(f"✅ 精选完成，已扫描全部可用推文，共推送 {sent_tweet_count} 条合格推文。")
