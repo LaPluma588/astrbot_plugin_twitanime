@@ -19,24 +19,24 @@
       }
     }
   },
-  "gemini_section": {
+"gemini_section": {
     "type": "object",
-    "description": "Gemini AI 审美打分配置",
+    "description": "Gemini AI 配置",
     "items": {
       "gemini_api_key": {
         "type": "string",
-        "description": "Gemini API Key",
-        "secret": true,
+        "description": "Gemini API Key (支持多 Key)",
+        "hint": "填入 Gemini API Key。若有多个 Key 请用英文逗号或换行分隔，插件会自动轮询与失效切换",
         "default": ""
       },
       "model_name": {
         "type": "string",
-        "description": "Gemini 模型",
+        "description": "评估模型名称",
         "default": "gemini-3.1-flash-lite"
       },
       "score_threshold": {
         "type": "float",
-        "description": "AI 审美合格线 (0-10)",
+        "description": "合格审美打分阈值 (1-10)",
         "default": 7.0
       }
     }
@@ -59,6 +59,24 @@
         "type": "string",
         "description": "黑名单标签（半角逗号分隔）",
         "default": "screenshot, game_screenshot, 3d, realistic, 1boy, male_focus, text_focus, no_humans, tokusatsu"
+      }
+    }
+  },
+"storage_section": {
+    "type": "object",
+    "description": "本地文件与下载配置",
+    "items": {
+      "save_local": {
+        "type": "bool",
+        "description": "保存精选插画到本地",
+        "hint": "开启后，精选通过的插画除了发送给用户外，还会持久化保存到 plugin_data/astrbot_plugin_twitanime/saved/ 目录",
+        "default": false
+      },
+      "download_orig": {
+        "type": "bool",
+        "description": "强制抓取高清原图 (orig)",
+        "hint": "开启后，将强制把推特图片链接替换为 name=orig 获取最高画质原图",
+        "default": false
       }
     }
   }

@@ -2,5 +2,5 @@ twikit @ git+https://github.com/unclecode/twikit.git
 google-genai
 onnxruntime
 opencv-python-headless
-pandas
 numpy
+pillow

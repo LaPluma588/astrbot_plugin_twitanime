@@ -1,9 +1,21 @@
 import os
+import re
+import aiohttp
 from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, Optional
 from twikit import Client
 
 from astrbot.api import logger
+
+def get_orig_image_url(url: str) -> str:
+    """将 Twitter 图片 URL 强制转换为 name=orig 高清原图 URL"""
+    if not url:
+        return url
+    if 'name=' in url:
+        return re.sub(r'name=[a-zA-Z0-9_]+', 'name=orig', url)
+    if '?' in url:
+        return f"{url}&name=orig"
+    return f"{url}?format=jpg&name=orig"
 
 class TwitterFetcher:
     def __init__(self, cookies_file: Path, proxy: Optional[str] = None):
@@ -12,7 +24,6 @@ class TwitterFetcher:
         self.client = Client('en-US', proxy=proxy if proxy else None)
 
     async def init_client(self) -> bool:
-        """从 Cookie 文件登录推特"""
         if not self.cookies_file.exists():
             logger.error(f"[Twitanime] ❌ Cookie 文件不存在: {self.cookies_file}")
             return False
@@ -25,12 +36,26 @@ class TwitterFetcher:
             logger.error(f"[Twitanime] ❌ Twikit 登录/加载 Cookie 失败: {e}")
             return False
 
-    async def fetch_image_tweets_stream(self, batch_size: int = 20) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        持续分页获取 Timeline，并逐条返回包含图片的推文数据对象
-        """
+    async def download_image_direct(self, url: str, filepath: Path) -> bool:
+        """直接使用 aiohttp 异步下载指定 URL 图片"""
         try:
-            logger.info(f"[Twitanime] 📡 正在向 Twitter 获取初始 Timeline (单页: {batch_size} 条)...")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, proxy=self.proxy) as resp:
+                    if resp.status == 200:
+                        content = await resp.read()
+                        with open(filepath, 'wb') as f:
+                            f.write(content)
+                        return True
+                    else:
+                        logger.error(f"[Twitanime] ❌ 图片下载 HTTP 状态异常: {resp.status}")
+                        return False
+        except Exception as e:
+            logger.error(f"[Twitanime] ❌ aiohttp 下载失败: {e}")
+            return False
+
+    async def fetch_image_tweets_stream(self, batch_size: int = 20) -> AsyncGenerator[Dict[str, Any], None]:
+        try:
+            logger.info(f"[Twitanime] 📡 正在向 Twitter 获取初始 Timeline...")
             timeline = await self.client.get_timeline(count=batch_size)
         except Exception as e:
             logger.error(f"[Twitanime] ❌ 获取 Timeline 失败: {e}")
@@ -38,7 +63,7 @@ class TwitterFetcher:
 
         page_count = 1
         while timeline:
-            logger.info(f"[Twitanime] 📊 第 {page_count} 页获取到 {len(timeline)} 条推文，开始筛选图片...")
+            logger.info(f"[Twitanime] 📊 第 {page_count} 页获取到 {len(timeline)} 条推文...")
 
             for tweet in timeline:
                 target_tweet = tweet
@@ -46,10 +71,12 @@ class TwitterFetcher:
                     target_tweet = tweet.retweeted_tweet
 
                 media_list = getattr(target_tweet, 'media', []) or []
-                photo_medias = [
-                    (idx + 1, m) for idx, m in enumerate(media_list) 
-                    if getattr(m, 'type', '') == 'photo'
-                ]
+                photo_medias = []
+                
+                for idx, m in enumerate(media_list):
+                    if getattr(m, 'type', '') == 'photo':
+                        base_url = getattr(m, 'media_url_https', None) or getattr(m, 'media_url', None) or getattr(m, 'url', '')
+                        photo_medias.append((idx + 1, m, base_url))
 
                 if not photo_medias:
                     continue
@@ -59,19 +86,17 @@ class TwitterFetcher:
                 author_name = getattr(user_obj, 'name', '未知作者') if user_obj else '未知作者'
                 author_screen_name = getattr(user_obj, 'screen_name', '') if user_obj else ''
 
-                # 产出整条推文及其包含的所有图片信息
                 yield {
                     "tweet_id": tweet_id,
                     "author_name": author_name,
                     "author_screen_name": author_screen_name,
-                    "photos": photo_medias  # List of (media_index, media_obj)
+                    "photos": photo_medias
                 }
 
-            # 翻页逻辑：请求下一页 Timeline
             try:
                 logger.info(f"[Twitanime] 🔄 正在加载下一页 Timeline...")
                 timeline = await timeline.next()
                 page_count += 1
             except Exception as e:
-                logger.warning(f"[Twitanime] ⚠️ 无法获取下一页 Timeline (可能已到尽头): {e}")
+                logger.warning(f"[Twitanime] ⚠️ 无法获取下一页 Timeline: {e}")
                 break
