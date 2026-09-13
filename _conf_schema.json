@@ -43,8 +43,14 @@
   },
   "filter_section": {
     "type": "object",
-    "description": "WD14 粗筛标签配置",
+    "description": "WD14 粗筛与作者拦截配置",
     "items": {
+      "reject_business_user": {
+        "type": "bool",
+        "description": "拦截金标 (Business) 官方/企业账号推文",
+        "hint": "开启后，若推文作者为金标认证账号 (verified_type 为 Business)，将直接在提取阶段拦截剔除",
+        "default": true
+      },
       "wd14_threshold": {
         "type": "float",
         "description": "WD14 标签判定阈值",
@@ -62,22 +68,28 @@
       }
     }
   },
-"storage_section": {
-    "type": "object",
-    "description": "本地文件与下载配置",
-    "items": {
-      "save_local": {
-        "type": "bool",
-        "description": "保存精选插画到本地",
-        "hint": "开启后，精选通过的插画除了发送给用户外，还会持久化保存到 plugin_data/astrbot_plugin_twitanime/saved/ 目录",
-        "default": false
-      },
-      "download_orig": {
-        "type": "bool",
-        "description": "强制抓取高清原图 (orig)",
-        "hint": "开启后，将强制把推特图片链接替换为 name=orig 获取最高画质原图",
-        "default": false
+  "storage_section": {
+      "type": "object",
+      "description": "本地文件与下载配置",
+      "items": {
+        "auto_like": {
+          "type": "bool",
+          "description": "精选通过后自动点赞推文",
+          "hint": "开启后，凡是突破 WD14 和 Gemini 评估并准备推送的插画推文，系统将自动在 Twitter 上为其点赞",
+          "default": false
+        },
+        "save_local": {
+          "type": "bool",
+          "description": "保存精选插画到本地",
+          "hint": "开启后，精选通过的插画除了发送给用户外，还会持久化保存到 plugin_data/astrbot_plugin_twitanime/saved/ 目录",
+          "default": false
+        },
+        "download_orig": {
+          "type": "bool",
+          "description": "强制抓取高清原图 (orig)",
+          "hint": "开启后，将强制把推特图片链接替换为 name=orig 获取最高画质原图",
+          "default": false
+        }
       }
     }
-  }
 }

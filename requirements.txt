@@ -1,4 +1,4 @@
-twikit @ git+https://github.com/unclecode/twikit.git
+twikit @ git+https://github.com/LaPluma588/twikit.git
 google-genai
 onnxruntime
 opencv-python-headless

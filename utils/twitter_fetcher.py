@@ -85,11 +85,17 @@ class TwitterFetcher:
                 user_obj = getattr(target_tweet, 'user', None)
                 author_name = getattr(user_obj, 'name', '未知作者') if user_obj else '未知作者'
                 author_screen_name = getattr(user_obj, 'screen_name', '') if user_obj else ''
+                
+                # 提取 user 的 verified_type 属性
+                verified_type = getattr(user_obj, 'verified_type', '') or ''
+                if isinstance(verified_type, str):
+                    verified_type = verified_type.strip()
 
                 yield {
                     "tweet_id": tweet_id,
                     "author_name": author_name,
                     "author_screen_name": author_screen_name,
+                    "verified_type": verified_type,
                     "photos": photo_medias
                 }
 
@@ -100,3 +106,20 @@ class TwitterFetcher:
             except Exception as e:
                 logger.warning(f"[Twitanime] ⚠️ 无法获取下一页 Timeline: {e}")
                 break
+            
+    async def favorite_tweet_by_id(self, tweet_id: str) -> bool:
+        """根据推文 ID 拉取 Tweet 对象并执行 favorite() 点赞"""
+        try:
+            logger.info(f"[Twitanime] ❤️ 正在获取推文对象 (ID: {tweet_id})...")
+            tweet = await self.client.get_tweet_by_id(tweet_id)
+            if not tweet:
+                logger.error(f"[Twitanime] ❌ 未能获取到推文 (ID: {tweet_id})，可能已被删除或限制访问。")
+                return False
+
+            logger.info(f"[Twitanime] 📌 正在为推文 {tweet_id} 执行 favorite()...")
+            res = await tweet.favorite()
+            logger.info(f"[Twitanime] ✅ 点赞返回结果: {res}")
+            return True
+        except Exception as e:
+            logger.error(f"[Twitanime] ❌ 推文 {tweet_id} favorite() 执行失败: {e}")
+            return False
