@@ -1,3 +1,4 @@
+# twikit 使用修补分支，解决底层 API 解析 Bug
 twikit @ git+https://github.com/LaPluma588/twikit.git
 google-genai
 onnxruntime

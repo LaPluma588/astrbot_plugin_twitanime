@@ -37,5 +37,5 @@ class CookieManager:
                 json.dump(formatted_cookies, f, indent=4)
             return True
         except Exception as e:
-            print(f"[Twitanime] Cookie 解析或保存失败: {e}")
+            print(f"Cookie 解析或保存失败: {e}")
             return False

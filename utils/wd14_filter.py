@@ -66,5 +66,5 @@ class WD14Filter:
             return True, "匹配成功，无违规标签"
 
         except Exception as e:
-            logger.error(f"[Twitanime] ❌ WD14 推理过程出错: {e}")
+            logger.error(f"WD14 推理过程出错: {e}")
             return False, f"WD14 处理失败: {str(e)}"

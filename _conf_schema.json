@@ -19,15 +19,28 @@
       }
     }
   },
-"gemini_section": {
+  "gemini_section": {
     "type": "object",
     "description": "Gemini AI 配置",
     "items": {
       "gemini_api_key": {
-        "type": "string",
-        "description": "Gemini API Key (支持多 Key)",
-        "hint": "填入 Gemini API Key。若有多个 Key 请用英文逗号或换行分隔，插件会自动轮询与失效切换",
-        "default": ""
+        "type": "template_list",
+        "description": "Gemini API Key 列表",
+        "hint": "每项添加一个 Gemini API Key，插件会自动轮询与失效切换",
+        "templates": {
+          "gemini_key": {
+            "name": "API Key",
+            "hint": "添加一个 Gemini API Key",
+            "display_item": "key",
+            "items": {
+              "key": {
+                "description": "API Key",
+                "type": "string",
+                "default": ""
+              }
+            }
+          }
+        }
       },
       "model_name": {
         "type": "string",
@@ -38,6 +51,14 @@
         "type": "float",
         "description": "合格审美打分阈值 (1-10)",
         "default": 7.0
+      },
+      "custom_prompt": {
+        "type": "string",
+        "description": "自定义 AI 审核提示词（可选）",
+        "hint": "留空则使用插件内置的默认提示词。填写后插件会自动拼接 JSON 格式要求一并发送。可用此字段调整审美标准、增减筛选规则等",
+        "default": "",
+        "editor_mode": true,
+        "editor_language": "markdown"
       }
     }
   },
@@ -50,6 +71,12 @@
         "description": "拦截金标 (Business) 官方/企业账号推文",
         "hint": "开启后，若推文作者为金标认证账号 (verified_type 为 Business)，将直接在提取阶段拦截剔除",
         "default": true
+      },
+      "wd14_enabled": {
+        "type": "bool",
+        "description": "启用 WD14 本地粗筛",
+        "hint": "关闭后插件不会加载 WD14 ONNX 模型，所有图片直接进入 Gemini AI 审核",
+        "default": false
       },
       "wd14_threshold": {
         "type": "float",
@@ -69,27 +96,51 @@
     }
   },
   "storage_section": {
-      "type": "object",
-      "description": "本地文件与下载配置",
-      "items": {
-        "auto_like": {
-          "type": "bool",
-          "description": "精选通过后自动点赞推文",
-          "hint": "开启后，凡是突破 WD14 和 Gemini 评估并准备推送的插画推文，系统将自动在 Twitter 上为其点赞",
-          "default": false
-        },
-        "save_local": {
-          "type": "bool",
-          "description": "保存精选插画到本地",
-          "hint": "开启后，精选通过的插画除了发送给用户外，还会持久化保存到 plugin_data/astrbot_plugin_twitanime/saved/ 目录",
-          "default": false
-        },
-        "download_orig": {
-          "type": "bool",
-          "description": "强制抓取高清原图 (orig)",
-          "hint": "开启后，将强制把推特图片链接替换为 name=orig 获取最高画质原图",
-          "default": false
-        }
+    "type": "object",
+    "description": "本地文件与下载配置",
+    "items": {
+      "auto_like": {
+        "type": "bool",
+        "description": "精选通过后自动点赞推文",
+        "hint": "开启后，凡是突破 WD14 和 Gemini 评估并准备推送的插画推文，系统将自动在 Twitter 上为其点赞",
+        "default": false
+      },
+      "save_local": {
+        "type": "bool",
+        "description": "保存精选插画到本地",
+        "hint": "开启后，精选通过的插画除了发送给用户外，还会持久化保存到 plugin_data/astrbot_plugin_twitanime/saved/ 目录",
+        "default": false
+      },
+      "download_orig": {
+        "type": "bool",
+        "description": "强制抓取高清原图 (orig)",
+        "hint": "开启后，将强制把推特图片链接替换为 name=orig 获取最高画质原图",
+        "default": false
       }
     }
+  },
+  "schedule_section": {
+    "type": "object",
+    "description": "定时投放配置",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "开启定时投放",
+        "hint": "开启后插件将在后台按时自动执行插画精选投放",
+        "default": false
+      },
+      "times": {
+        "type": "string",
+        "description": "投放时刻（逗号分隔的 HH:MM）",
+        "hint": "例如 08:00,20:00 表示每天早上8点和晚上8点各投放一次",
+        "default": "08:00,20:00"
+      },
+      "count": {
+        "type": "int",
+        "description": "每次投放图片数量",
+        "hint": "每次定时触发时筛选并推送的合格插画数量（1-10）",
+        "default": 3
+      }
+    }
+  }
 }
